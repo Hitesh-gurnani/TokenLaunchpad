@@ -1,4 +1,5 @@
 import "./App.css";
+import "./index.css"; // <-
 import { TokenLaunchpad } from "./components/TokenLaunchpad";
 // wallet adapter imports
 import {
