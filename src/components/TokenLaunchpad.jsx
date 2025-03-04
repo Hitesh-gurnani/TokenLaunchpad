@@ -1,8 +1,18 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Sparkles, Rocket, Shield, Zap, Sliders } from "lucide-react";
+import {
+  createInitializeMint2Instruction,
+  getMinimumBalanceForRentExemptAccount,
+  MINT_SIZE,
+  TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
+import { Keypair, SystemProgram, Transaction } from "@solana/web3.js";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 
 export function TokenLaunchpad() {
+  const wallet = useWallet();
+  const { connection } = useConnection();
   const [formData, setFormData] = useState({
     name: "",
     symbol: "",
@@ -11,6 +21,64 @@ export function TokenLaunchpad() {
   });
 
   const [isHoveringLaunch, setIsHoveringLaunch] = useState(false);
+
+  async function createToken(e) {
+    e.preventDefault();
+
+    try {
+      if (!wallet.connected || !wallet.publicKey) {
+        throw new Error(
+          "Wallet not connected. Please connect your wallet first."
+        );
+      }
+
+      console.log("Creating token...");
+      const lamports = await getMinimumBalanceForRentExemptAccount(connection);
+      const mintKeypair = Keypair.generate();
+
+      console.log("Mint keypair generated:", mintKeypair.publicKey);
+
+      const transaction = new Transaction().add(
+        SystemProgram.createAccount({
+          fromPubkey: wallet.publicKey,
+          newAccountPubkey: mintKeypair.publicKey,
+          lamports: lamports,
+          space: MINT_SIZE,
+          programId: TOKEN_PROGRAM_ID,
+        }),
+        createInitializeMint2Instruction(
+          mintKeypair.publicKey,
+          6, // 6 decimals
+          wallet.publicKey,
+          wallet.publicKey,
+          TOKEN_PROGRAM_ID
+        )
+      );
+
+      const recentBlockhash = await connection.getLatestBlockhash();
+      transaction.recentBlockhash = recentBlockhash.blockhash;
+      transaction.feePayer = wallet.publicKey;
+
+      transaction.partialSign(mintKeypair);
+
+      console.log("Sending transaction to wallet for approval...");
+      const signature = await wallet.sendTransaction(transaction, connection);
+      console.log("Transaction sent, signature:", signature);
+
+      const confirmation = await connection.confirmTransaction(
+        signature,
+        "confirmed"
+      );
+      console.log("Transaction confirmed:", confirmation);
+
+      alert(
+        `Token created successfully! Mint address: ${mintKeypair.publicKey}`
+      );
+    } catch (error) {
+      console.error("Error creating token:", error);
+      alert("Error creating token: " + error.message);
+    }
+  }
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -85,7 +153,7 @@ export function TokenLaunchpad() {
               Token Details
             </h2>
 
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={createToken}>
               <motion.div
                 className="space-y-4"
                 variants={staggerContainer}
@@ -156,93 +224,14 @@ export function TokenLaunchpad() {
               </motion.div>
             </form>
           </motion.div>
-
-          {/* Info Section */}
-          <motion.div
-            className="flex-1 min-w-[380px] bg-gray-900/20 backdrop-blur-xl p-8 rounded-3xl shadow-[0_12px_40px_rgba(0,0,0,0.2)] border border-gray-800/30"
-            initial="hidden"
-            animate="visible"
-            variants={fadeInUp}
-            whileHover={{ y: -10, transition: { duration: 0.3 } }}
-          >
-            <h2 className="mb-8 text-fuchsia-400 text-2xl font-bold flex items-center gap-2">
-              <Sparkles className="h-6 w-6" />
-              Why Choose Us?
-            </h2>
-
-            <motion.div
-              className="space-y-6"
-              variants={staggerContainer}
-              initial="hidden"
-              animate="visible"
-            >
-              {[
-                {
-                  icon: <Zap className="w-5 h-5" />,
-                  title: "Fast & Easy",
-                  desc: "Launch your token effortlessly in minutes.",
-                },
-                {
-                  icon: <Shield className="w-5 h-5" />,
-                  title: "Secure",
-                  desc: "Built on Solana for unmatched security and speed.",
-                },
-                {
-                  icon: (
-                    <motion.div
-                      animate={{ rotate: isHoveringLaunch ? 360 : 0 }}
-                      transition={{
-                        duration: 2,
-                        ease: "linear",
-                        repeat: isHoveringLaunch ? Number.POSITIVE_INFINITY : 0,
-                      }}
-                    >
-                      <Rocket className="w-5 h-5" />
-                    </motion.div>
-                  ),
-                  title: "Low Fees",
-                  desc: "Enjoy minimal transaction fees compared to other blockchains.",
-                },
-                {
-                  icon: <Sliders className="w-5 h-5" />,
-                  title: "Full Control",
-                  desc: "Maintain complete ownership and control of your token.",
-                },
-              ].map((item, index) => (
-                <motion.div
-                  key={index}
-                  className="p-4 rounded-xl bg-gray-800/30 border border-gray-700/30 hover:border-cyan-500/30 transition-all duration-300"
-                  variants={fadeInUp}
-                  whileHover={{
-                    scale: 1.03,
-                    backgroundColor: "rgba(17, 24, 39, 0.5)",
-                    transition: { duration: 0.2 },
-                  }}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-gradient-to-br from-cyan-500/20 to-fuchsia-500/20 text-cyan-400">
-                      {item.icon}
-                    </div>
-                    <div>
-                      <h3 className="text-cyan-300 mb-1 text-lg font-medium">
-                        {item.title}
-                      </h3>
-                      <p className="text-gray-300 text-sm">{item.desc}</p>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </motion.div>
-          </motion.div>
         </div>
-        {/* Floating Particles */}
+
         <Particles />
       </div>
     </div>
   );
 }
 
-// Animated background particles
 function Particles() {
   const particles = Array.from({ length: 20 }).map((_, i) => ({
     id: i,
